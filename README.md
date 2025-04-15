@@ -36,9 +36,9 @@ A full-featured personal finance dashboard built with a modern tech stack. Inclu
 
 ## 📸 Screenshots
 
-| Dashboard View                             |
-| ------------------------------------------ |
-| ![Dashboard Preview](link-to-image-or-gif) |
+| Dashboard View                       |
+| ------------------------------------ |
+| ![Dashboard Preview](/dashboard.png) |
 
 ---
 
