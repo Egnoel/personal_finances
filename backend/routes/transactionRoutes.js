@@ -1,6 +1,7 @@
 import express from 'express';
 
 import { protectRoute } from '../middlewares/authMiddleware.js';
+import { validateObjectId } from '../middlewares/validateObjectId.js';
 import {
   createTransaction,
   getTransactions,
@@ -8,7 +9,6 @@ import {
   updateTransaction,
   exportTransactions,
 } from '../controller/transactionController.js';
-const { query, matchedData, validationResult } = require('express-validator');
 
 const router = express.Router();
 
@@ -33,10 +33,10 @@ router.post('/', protectRoute, createTransaction);
 router.get('/', protectRoute, getTransactions);
 
 // Route to delete a transaction by ID
-router.delete('/:id', protectRoute, deleteTransaction);
+router.delete('/:id', protectRoute, validateObjectId, deleteTransaction);
 
 // Route to update a transaction by ID
-router.put('/:id', protectRoute, updateTransaction);
+router.put('/:id', protectRoute, validateObjectId, updateTransaction);
 
 // Route to export transactions as CSV
 router.get('/export', protectRoute, exportTransactions);

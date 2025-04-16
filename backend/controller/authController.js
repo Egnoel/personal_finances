@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
-import generateToken from '../utils/generateToken.js';
+import { generateToken } from '../utils/generateToken.js';
 
 export const signup = async (req, res) => {
   const { fullName, email, password } = req.body;
@@ -21,13 +21,13 @@ export const signup = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
     const newUser = new User({ fullName, email, password: hashedPassword });
     if (newUser) {
-      generateToken(newUser._id, res);
+      const token = generateToken(newUser._id, res);
       await newUser.save();
       res.status(201).json({
         _id: newUser._id,
         fullName: newUser.fullName,
         email: newUser.email,
-        profilePic: newUser.profilePic,
+        token,
       });
     } else {
       return res.status(400).json({ message: 'Failed to create user' });
@@ -49,12 +49,12 @@ export const login = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
-    generateToken(user._id, res);
+    const token = generateToken(user._id, res);
     res.json({
       _id: user._id,
       fullName: user.fullName,
       email: user.email,
-      profilePic: user.profile,
+      token,
     });
   } catch (error) {
     console.log(error);

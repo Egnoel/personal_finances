@@ -1,5 +1,7 @@
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
+import { cvsWriter } from '../utils/csvExporter.js';
+import fs from 'fs';
 
 export const createTransaction = async (req, res) => {
   const { amount, transactionType, category, description, date } = req.body;
@@ -77,17 +79,84 @@ export const updateTransaction = async (req, res) => {
     if (transaction.user.toString() !== req.user._id.toString()) {
       return res.status(401).json({ message: 'Not authorized' });
     }
-    transaction.amount = amount;
-    transaction.transactionType = transactionType;
-    transaction.category = category;
-    transaction.description = description;
-    transaction.date = date;
+
+    if (!amount && !transactionType && !category && !description && !date) {
+      return res.status(400).json({ message: 'No fields to update' });
+    }
+
+    if (amount) {
+      if (amount < 0) {
+        return res.status(400).json({ message: 'Amount must be positive' });
+      }
+      transaction.amount = amount;
+    }
+
+    if (transactionType) {
+      if (!['income', 'expense'].includes(transactionType)) {
+        return res.status(400).json({ message: 'Invalid transaction type' });
+      }
+      transaction.transactionType = transactionType;
+    }
+
+    if (category) {
+      if (category.length < 3) {
+        return res
+          .status(400)
+          .json({ message: 'Category must be at least 3 characters long' });
+      }
+      transaction.category = category;
+    }
+
+    if (description) {
+      if (description.length < 5) {
+        return res
+          .status(400)
+          .json({ message: 'Description must be at least 5 characters long' });
+      }
+      transaction.description = description;
+    }
+
+    if (date) {
+      if (new Date(date) > new Date()) {
+        return res
+          .status(400)
+          .json({ message: 'Date cannot be in the future' });
+      }
+      transaction.date = new Date(date);
+    }
+
     await transaction.save();
-    res.json(transaction);
+    res.status(200).json(transaction);
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-export const exportTransactions = async (req, res) => {};
+export const exportTransactions = async (req, res) => {
+  try {
+    const transactions = await Transaction.find({ user: req.user._id });
+    if (transactions.length === 0) {
+      return res.status(404).json({ message: 'No transactions found' });
+    }
+    const csvData = transactions.map((transaction) => ({
+      amount: transaction.amount,
+      transactionType: transaction.transactionType,
+      category: transaction.category,
+      description: transaction.description,
+      date: transaction.date.toISOString().split('T')[0],
+    }));
+    await cvsWriter.writeRecords(csvData);
+    res.download('out.csv', 'transactions.csv', (err) => {
+      if (err) {
+        console.log(err);
+        res.status(500).json({ message: 'Error downloading file' });
+      } else {
+        fs.unlinkSync('out.csv'); // Delete the file after download
+      }
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
