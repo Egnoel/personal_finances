@@ -10,6 +10,27 @@ export const createTransaction = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+
+    if (!amount || !transactionType || !category || !description || !date) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+    if (amount < 0) {
+      return res.status(400).json({ message: 'Amount must be positive' });
+    }
+    if (!['income', 'expense'].includes(transactionType)) {
+      return res.status(400).json({ message: 'Invalid transaction type' });
+    }
+    if (transactionType === 'income') {
+      user.balance += amount;
+      user.totalIncome += amount;
+    }
+
+    if (transactionType === 'expense') {
+      user.balance -= amount;
+      user.totalExpense += amount;
+    }
+    await user.save();
+
     const transaction = new Transaction({
       user: req.user._id,
       amount,

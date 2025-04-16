@@ -15,6 +15,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    totalIncome: {
+      type: Number,
+      default: 0,
+    },
+    totalExpense: {
+      type: Number,
+      default: 0,
+    },
+    balance: {
+      type: Number,
+      default: 0,
+    },
     createdAt: {
       type: Date,
       default: Date.now,
