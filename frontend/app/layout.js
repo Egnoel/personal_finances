@@ -1,3 +1,4 @@
+import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
 
@@ -8,7 +9,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
         <ThemeProvider
           attribute="class"
@@ -17,6 +18,7 @@ export default function RootLayout({ children }) {
           disableTransitionOnChange
         >
           {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
