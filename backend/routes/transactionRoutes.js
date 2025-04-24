@@ -8,6 +8,9 @@ import {
   deleteTransaction,
   updateTransaction,
   exportTransactions,
+  getTransactionSummary,
+  getExpensesByCategory,
+  getMonthlyComparison,
 } from '../controller/transactionController.js';
 
 const router = express.Router();
@@ -40,5 +43,9 @@ router.put('/:id', protectRoute, validateObjectId, updateTransaction);
 
 // Route to export transactions as CSV
 router.get('/export', protectRoute, exportTransactions);
+
+router.get('/summary', protectRoute, getTransactionSummary);
+router.get('/expenses-by-category', protectRoute, getExpensesByCategory);
+router.get('/monthly-comparison', protectRoute, getMonthlyComparison);
 
 export default router;

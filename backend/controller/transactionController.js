@@ -1,7 +1,8 @@
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
-import { cvsWriter } from '../utils/csvExporter.js';
+import { createObjectCsvWriter, createObjectCsvStringifier } from 'csv-writer';
 import fs from 'fs';
+import mongoose from 'mongoose';
 
 export const createTransaction = async (req, res) => {
   const { amount, transactionType, category, description, date } = req.body;
@@ -74,6 +75,7 @@ export const getTransactions = async (req, res) => {
 export const deleteTransaction = async (req, res) => {
   const { id } = req.params;
   try {
+    const user = await User.findById(req.user._id);
     const transaction = await Transaction.findById(id);
     if (!transaction) {
       return res.status(404).json({ message: 'Transaction not found' });
@@ -81,7 +83,17 @@ export const deleteTransaction = async (req, res) => {
     if (transaction.user.toString() !== req.user._id.toString()) {
       return res.status(401).json({ message: 'Not authorized' });
     }
-    await transaction.remove();
+    if (transaction.transactionType === 'income') {
+      user.balance -= transaction.amount;
+      user.totalIncome -= transaction.amount;
+      await user.save();
+    } else if (transaction.transactionType === 'expense') {
+      user.balance -= transaction.amount;
+      user.totalExpense -= transaction.amount;
+      await user.save();
+    }
+
+    await Transaction.findByIdAndDelete(id);
     res.json({ message: 'Transaction removed' });
   } catch (error) {
     console.log(error);
@@ -117,6 +129,14 @@ export const updateTransaction = async (req, res) => {
         return res.status(400).json({ message: 'Invalid transaction type' });
       }
       transaction.transactionType = transactionType;
+      if (transactionType === 'income') {
+        transaction.user.balance += amount;
+        transaction.user.totalIncome += amount;
+      } else if (transactionType === 'expense') {
+        transaction.user.balance -= amount;
+        transaction.user.totalExpense += amount;
+      }
+      await transaction.user.save();
     }
 
     if (category) {
@@ -157,9 +177,21 @@ export const updateTransaction = async (req, res) => {
 export const exportTransactions = async (req, res) => {
   try {
     const transactions = await Transaction.find({ user: req.user._id });
+
     if (transactions.length === 0) {
       return res.status(404).json({ message: 'No transactions found' });
     }
+
+    const csvStringifier = createObjectCsvStringifier({
+      header: [
+        { id: 'amount', title: 'Amount' },
+        { id: 'transactionType', title: 'Transaction Type' },
+        { id: 'category', title: 'Category' },
+        { id: 'description', title: 'Description' },
+        { id: 'date', title: 'Date' },
+      ],
+    });
+
     const csvData = transactions.map((transaction) => ({
       amount: transaction.amount,
       transactionType: transaction.transactionType,
@@ -167,15 +199,132 @@ export const exportTransactions = async (req, res) => {
       description: transaction.description,
       date: transaction.date.toISOString().split('T')[0],
     }));
-    await cvsWriter.writeRecords(csvData);
-    res.download('out.csv', 'transactions.csv', (err) => {
-      if (err) {
-        console.log(err);
-        res.status(500).json({ message: 'Error downloading file' });
-      } else {
-        fs.unlinkSync('out.csv'); // Delete the file after download
-      }
-    });
+
+    const csvContent =
+      csvStringifier.getHeaderString() +
+      csvStringifier.stringifyRecords(csvData);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="transactions.csv"'
+    );
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    res.status(200).send(csvContent);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getTransactionSummary = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const summary = {
+      totalIncome: user.totalIncome,
+      totalExpense: user.totalExpense,
+      balance: user.balance,
+    };
+
+    res.status(200).json(summary);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getExpensesByCategory = async (req, res) => {
+  try {
+    const expenses = await Transaction.aggregate([
+      {
+        $match: {
+          user: new mongoose.Types.ObjectId(req.user._id),
+          transactionType: 'expense',
+        },
+      },
+      {
+        $group: {
+          _id: '$category',
+          total: { $sum: '$amount' },
+        },
+      },
+      {
+        $project: {
+          category: '$_id',
+          total: 1,
+          _id: 0,
+        },
+      },
+      {
+        $sort: { total: -1 },
+      },
+    ]);
+
+    res.status(200).json(expenses);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getMonthlyComparison = async (req, res) => {
+  try {
+    const comparison = await Transaction.aggregate([
+      {
+        $match: {
+          user: new mongoose.Types.ObjectId(req.user._id),
+        },
+      },
+      {
+        $group: {
+          _id: {
+            month: { $month: '$date' },
+            year: { $year: '$date' },
+            type: '$transactionType',
+          },
+          total: { $sum: '$amount' },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            month: '$_id.month',
+            year: '$_id.year',
+          },
+          income: {
+            $sum: {
+              $cond: [{ $eq: ['$_id.type', 'income'] }, '$total', 0],
+            },
+          },
+          expense: {
+            $sum: {
+              $cond: [{ $eq: ['$_id.type', 'expense'] }, '$total', 0],
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          month: '$_id.month',
+          year: '$_id.year',
+          income: 1,
+          expense: 1,
+          _id: 0,
+        },
+      },
+      {
+        $sort: { year: 1, month: 1 },
+      },
+    ]);
+
+    res.status(200).json(comparison);
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: 'Server error' });
